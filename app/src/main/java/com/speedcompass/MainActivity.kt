@@ -1,6 +1,7 @@
 package com.speedcompass
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.Sensor
@@ -11,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.Surface as AndroidSurface
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -27,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,6 +58,7 @@ import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
+import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -73,7 +77,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         setContent {
             SpeedCompassApp(
-                hasLocationPermission = ::hasFineLocationPermission,
+                hasLocationPermission = ::hasLocationPermission,
                 requestPermissions = ::requestablePermissions,
                 onPermissionReady = { TrackingRepository.startLocationUpdates(recording = false) },
                 onStartTracking = {
@@ -81,8 +85,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 },
                 onStopTracking = {
                     startService(TrackingService.stopIntent(this))
-                    if (hasFineLocationPermission()) TrackingRepository.startLocationUpdates(recording = false)
+                    if (hasLocationPermission()) TrackingRepository.startLocationUpdates(recording = false)
                 },
+                onOpenMaps = ::openMaps,
                 onExportRoute = ::shareLatestRoute,
             )
         }
@@ -93,7 +98,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         rotationSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
-        if (hasFineLocationPermission()) TrackingRepository.startLocationUpdates(recording = false)
+        if (hasLocationPermission()) TrackingRepository.startLocationUpdates(recording = false)
     }
 
     override fun onPause() {
@@ -147,16 +152,38 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
-    private fun hasFineLocationPermission(): Boolean =
+    private fun hasLocationPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
 
     private fun requestablePermissions(): Array<String> = buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
         add(Manifest.permission.ACCESS_COARSE_LOCATION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
     }.toTypedArray()
+
+    private fun openMaps(state: DashboardState) {
+        val uri = if (state.lastLatitude != null && state.lastLongitude != null) {
+            val latitude = String.format(Locale.US, "%.6f", state.lastLatitude)
+            val longitude = String.format(Locale.US, "%.6f", state.lastLongitude)
+            Uri.parse("geo:$latitude,$longitude?z=16")
+        } else {
+            Uri.parse("geo:0,0")
+        }
+        val googleMapsIntent = Intent(Intent.ACTION_VIEW, uri).setPackage(GOOGLE_MAPS_PACKAGE)
+        val fallbackIntent = Intent(Intent.ACTION_VIEW, uri)
+        try {
+            startActivity(googleMapsIntent)
+        } catch (_: ActivityNotFoundException) {
+            try {
+                startActivity(fallbackIntent)
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, "No maps app available", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     private fun shareLatestRoute() {
         val points = TrackingRepository.snapshotPoints()
@@ -171,6 +198,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         startActivity(Intent.createChooser(shareIntent, "Export GPX route"))
     }
+
+    private companion object {
+        private const val GOOGLE_MAPS_PACKAGE = "com.google.android.apps.maps"
+    }
 }
 
 @Composable
@@ -180,6 +211,7 @@ private fun SpeedCompassApp(
     onPermissionReady: () -> Unit,
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
+    onOpenMaps: (DashboardState) -> Unit,
     onExportRoute: () -> Unit,
 ) {
     val state by TrackingRepository.state.collectAsStateWithLifecycle()
@@ -213,6 +245,7 @@ private fun SpeedCompassApp(
                     if (hasLocationPermission()) onStartTracking() else permissionLauncher.launch(requestPermissions())
                 },
                 onStopTracking = onStopTracking,
+                onOpenMaps = { onOpenMaps(state) },
                 onExportRoute = onExportRoute,
             )
         }
@@ -225,6 +258,7 @@ private fun Dashboard(
     onToggleUnit: () -> Unit,
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
+    onOpenMaps: () -> Unit,
     onExportRoute: () -> Unit,
 ) {
     BoxWithConstraints(
@@ -250,7 +284,7 @@ private fun Dashboard(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 SpeedPanel(state, onToggleUnit, Modifier.weight(1f).fillMaxWidth())
-                CompassPanel(state, Modifier.weight(1f).fillMaxWidth())
+                CompassPanel(state, Modifier.weight(1f).fillMaxWidth().offset(y = (-28).dp))
             }
         }
 
@@ -258,8 +292,11 @@ private fun Dashboard(
             state = state,
             onStartTracking = onStartTracking,
             onStopTracking = onStopTracking,
+            onOpenMaps = onOpenMaps,
             onExportRoute = onExportRoute,
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = if (isLandscape) 0.dp else (-28).dp),
         )
     }
 }
@@ -276,8 +313,8 @@ private fun SpeedPanel(state: DashboardState, onToggleUnit: () -> Unit, modifier
             color = Color(0xFFF2F2F2),
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            fontSize = 142.sp,
-            lineHeight = 142.sp,
+            fontSize = 168.sp,
+            lineHeight = 168.sp,
             textAlign = TextAlign.Center,
         )
         Button(
@@ -285,7 +322,12 @@ private fun SpeedPanel(state: DashboardState, onToggleUnit: () -> Unit, modifier
             colors = darkButtonColors(),
             shape = RoundedCornerShape(6.dp),
         ) {
-            Text(state.selectedUnit.label, fontFamily = FontFamily.Monospace)
+            Text(
+                state.selectedUnit.label,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
         state.errorMessage?.let {
             Spacer(Modifier.height(8.dp))
@@ -369,6 +411,7 @@ private fun Controls(
     state: DashboardState,
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
+    onOpenMaps: () -> Unit,
     onExportRoute: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -383,6 +426,14 @@ private fun Controls(
             shape = RoundedCornerShape(6.dp),
         ) {
             Text(if (state.isRecording) "Stop" else "Start", fontFamily = FontFamily.Monospace)
+        }
+        Spacer(Modifier.width(10.dp))
+        Button(
+            onClick = onOpenMaps,
+            colors = darkButtonColors(),
+            shape = RoundedCornerShape(6.dp),
+        ) {
+            Text("Maps", fontFamily = FontFamily.Monospace)
         }
         Spacer(Modifier.width(10.dp))
         Button(

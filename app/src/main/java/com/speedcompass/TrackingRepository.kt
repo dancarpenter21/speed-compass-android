@@ -120,6 +120,8 @@ object TrackingRepository {
                 displayHeadingDegrees = target?.let { smoothHeading(current.displayHeadingDegrees, it) }
                     ?: current.displayHeadingDegrees,
                 hasLocation = true,
+                lastLatitude = location.latitude,
+                lastLongitude = location.longitude,
                 pointCount = points.size,
                 errorMessage = null,
             )

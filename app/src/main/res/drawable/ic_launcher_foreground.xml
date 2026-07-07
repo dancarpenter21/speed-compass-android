@@ -1,6 +1,3 @@
-<inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:inset="12dp">
-    <bitmap
-        android:gravity="center"
-        android:src="@drawable/speed_round" />
-</inset>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:gravity="center"
+    android:src="@mipmap/ic_launcher_foreground" />

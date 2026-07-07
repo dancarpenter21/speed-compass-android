@@ -25,5 +25,7 @@ data class DashboardState(
     val pointCount: Int = 0,
     val selectedUnit: SpeedUnit = SpeedUnit.Mph,
     val hasLocation: Boolean = false,
+    val lastLatitude: Double? = null,
+    val lastLongitude: Double? = null,
     val errorMessage: String? = null,
 )
