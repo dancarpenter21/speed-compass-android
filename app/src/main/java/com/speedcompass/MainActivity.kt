@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
@@ -357,10 +358,10 @@ private fun CompassPanel(state: DashboardState, modifier: Modifier = Modifier) {
                 fontSize = 54.sp,
             )
             Text(
-                text = "${normalizeDegrees(state.displayHeadingDegrees).toInt().toString().padStart(3, '0')} deg",
+                text = "${normalizeDegrees(state.displayHeadingDegrees).toInt().toString().padStart(3, '0')}°",
                 color = Color(0xFFBDBDBD),
                 fontFamily = FontFamily.Monospace,
-                fontSize = 18.sp,
+                fontSize = 28.sp,
             )
         }
     }
@@ -398,6 +399,50 @@ private fun CompassRing(headingDegrees: Float, modifier: Modifier = Modifier) {
                 cap = StrokeCap.Round,
             )
         }
+
+        // The dial rotates beneath the fixed heading index, so this marker stays
+        // attached to zero degrees and always identifies north.
+        val northAngle = Math.toRadians((-headingDegrees - 90f).toDouble())
+        val northDirection = Offset(
+            cos(northAngle).toFloat(),
+            sin(northAngle).toFloat(),
+        )
+        val northTangent = Offset(-northDirection.y, northDirection.x)
+        fun northArrowPoint(distance: Float, sideways: Float = 0f) = Offset(
+            x = center.x + northDirection.x * distance + northTangent.x * sideways,
+            y = center.y + northDirection.y * distance + northTangent.y * sideways,
+        )
+
+        val arrowTip = radius - 10.dp.toPx()
+        val arrowShoulder = radius - 34.dp.toPx()
+        val arrowTail = radius - 57.dp.toPx()
+        val arrowPath = Path().apply {
+            moveTo(northArrowPoint(arrowTip).x, northArrowPoint(arrowTip).y)
+            lineTo(northArrowPoint(arrowShoulder, 11.dp.toPx()).x, northArrowPoint(arrowShoulder, 11.dp.toPx()).y)
+            lineTo(northArrowPoint(arrowShoulder, 3.5.dp.toPx()).x, northArrowPoint(arrowShoulder, 3.5.dp.toPx()).y)
+            lineTo(northArrowPoint(arrowTail, 3.5.dp.toPx()).x, northArrowPoint(arrowTail, 3.5.dp.toPx()).y)
+            lineTo(northArrowPoint(arrowTail, -3.5.dp.toPx()).x, northArrowPoint(arrowTail, -3.5.dp.toPx()).y)
+            lineTo(northArrowPoint(arrowShoulder, -3.5.dp.toPx()).x, northArrowPoint(arrowShoulder, -3.5.dp.toPx()).y)
+            lineTo(northArrowPoint(arrowShoulder, -11.dp.toPx()).x, northArrowPoint(arrowShoulder, -11.dp.toPx()).y)
+            close()
+        }
+        drawPath(
+            path = arrowPath,
+            color = Color(0xFF4D080C),
+            style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+        )
+        drawPath(
+            path = arrowPath,
+            color = Color(0xFFFF3344),
+        )
+        drawLine(
+            color = Color(0xFFFFA0A8),
+            start = northArrowPoint(arrowTail + 4.dp.toPx()),
+            end = northArrowPoint(arrowTip - 8.dp.toPx()),
+            strokeWidth = 1.5.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
+
         drawLine(
             color = Color(0xFFF2F2F2),
             start = Offset(center.x, center.y - radius + 2.dp.toPx()),
