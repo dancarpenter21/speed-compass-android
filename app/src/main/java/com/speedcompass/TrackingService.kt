@@ -36,7 +36,7 @@ class TrackingService : Service() {
 
     private fun notification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_speed_compass)
             .setContentTitle("Recording bike route")
             .setContentText("Speed Compass is logging GPS points.")
             .setOngoing(true)
