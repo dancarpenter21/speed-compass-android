@@ -287,7 +287,7 @@ private fun Dashboard(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 SpeedPanel(state, onToggleUnit, Modifier.weight(1f).fillMaxWidth())
-                CompassPanel(state, Modifier.weight(1f).fillMaxWidth().offset(y = (-28).dp))
+                CompassPanel(state, Modifier.weight(1f).fillMaxWidth().offset(y = (-76).dp))
             }
         }
 
