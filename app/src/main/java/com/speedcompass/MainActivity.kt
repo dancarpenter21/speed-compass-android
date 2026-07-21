@@ -35,14 +35,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -60,6 +66,7 @@ import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
+import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.min
@@ -188,12 +195,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
-    private fun shareLatestRoute() {
+    private fun shareLatestRoute(routeName: String) {
         val points = TrackingRepository.snapshotPoints()
         if (points.isEmpty()) return
         val exportDir = File(cacheDir, "exports").also { it.mkdirs() }
-        val file = File(exportDir, "speed-compass-route.gpx")
-        file.writeText(routeToGpx(points))
+        val file = File(exportDir, "$routeName.gpx")
+        file.writeText(routeToGpx(points, routeName))
         val uri: Uri = FileProvider.getUriForFile(this, "$packageName.files", file)
         val shareIntent = Intent(Intent.ACTION_SEND)
             .setType("application/gpx+xml")
@@ -215,9 +222,11 @@ private fun SpeedCompassApp(
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
     onOpenMaps: (DashboardState) -> Unit,
-    onExportRoute: () -> Unit,
+    onExportRoute: (String) -> Unit,
 ) {
     val state by TrackingRepository.state.collectAsStateWithLifecycle()
+    var showExportDialog by rememberSaveable { mutableStateOf(false) }
+    var routeName by rememberSaveable { mutableStateOf("") }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { permissions ->
@@ -249,8 +258,56 @@ private fun SpeedCompassApp(
                 },
                 onStopTracking = onStopTracking,
                 onOpenMaps = { onOpenMaps(state) },
-                onExportRoute = onExportRoute,
+                onExportRoute = {
+                    routeName = LocalDate.now().toString()
+                    showExportDialog = true
+                },
             )
+
+            if (showExportDialog) {
+                val trimmedName = routeName.trim()
+                val hasInvalidCharacters = routeName.any { it == '/' || it == '\\' || it == '\u0000' }
+                val isValidName = trimmedName.isNotEmpty() &&
+                    trimmedName != "." &&
+                    trimmedName != ".." &&
+                    !hasInvalidCharacters
+
+                AlertDialog(
+                    onDismissRequest = { showExportDialog = false },
+                    title = { Text("Name GPX file") },
+                    text = {
+                        OutlinedTextField(
+                            value = routeName,
+                            onValueChange = { routeName = it },
+                            label = { Text("File name") },
+                            suffix = { Text(".gpx") },
+                            singleLine = true,
+                            isError = routeName.isNotEmpty() && !isValidName,
+                            supportingText = if (routeName.isNotEmpty() && !isValidName) {
+                                { Text("Enter a name without / or \\") }
+                            } else {
+                                null
+                            },
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showExportDialog = false
+                                onExportRoute(trimmedName)
+                            },
+                            enabled = isValidName,
+                        ) {
+                            Text("Export")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showExportDialog = false }) {
+                            Text("Cancel")
+                        }
+                    },
+                )
+            }
         }
     }
 }

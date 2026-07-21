@@ -1,5 +1,6 @@
 package com.speedcompass
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -21,7 +22,7 @@ class GpxWriterTest {
             routeName = "Bike & Test",
         )
 
-        assertTrue(gpx.contains("""<name>Bike &amp; Test</name>"""))
+        assertEquals(2, """<name>Bike &amp; Test</name>""".toRegex().findAll(gpx).count())
         assertTrue(gpx.contains("""<trkpt lat="40.0" lon="-73.0">"""))
         assertTrue(gpx.contains("<ele>12.5</ele>"))
         assertTrue(gpx.contains("<time>2026-07-06T16:00:00Z</time>"))
